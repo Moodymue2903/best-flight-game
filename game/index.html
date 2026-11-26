@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PAPERWING — a bright little flight game</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #7ec8f7;
+    font-family: "Trebuchet MS", "Segoe UI", Verdana, sans-serif; }
+  #game-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; display: none; }
+  .panel { position: absolute; background: rgba(20, 28, 48, 0.82); border: 3px solid #ffd94d;
+    border-radius: 14px; color: #fff; padding: 8px 12px; box-shadow: 0 4px 0 rgba(0,0,0,0.25); }
+  .panel .label { font-size: 11px; letter-spacing: 2px; color: #ffd94d; font-weight: bold; }
+  .panel .value { font-size: 30px; font-weight: bold; line-height: 1; color: #fff;
+    text-shadow: 0 2px 0 rgba(0,0,0,0.4); }
+  .panel .unit { font-size: 12px; color: #bfe8ff; font-weight: bold; }
+  #hud-alt { top: 14px; left: 14px; }
+  #hud-speed { top: 14px; left: 150px; }
+  #hud-heading { top: 14px; left: 286px; }
+  #hud-score-box { top: 14px; right: 14px; text-align: right; }
+  #hud-score-box .value { color: #ffd94d; }
+  #hud-objective { position: absolute; top: 96px; left: 50%; transform: translateX(-50%); text-align: center;
+    font-size: 17px; font-weight: bold; background: rgba(20,28,48,0.82); color: #fff;
+    border: 3px solid #7ed957; border-radius: 999px; padding: 7px 20px; white-space: nowrap; }
+  #hud-mission { position: absolute; top: 58px; left: 50%; transform: translateX(-50%);
+    font-size: 11px; letter-spacing: 2px; color: #ffd94d; font-weight: bold; padding-top: 4px; }
+
+  /* Fuel + throttle gauges, bottom left. */
+  #hud-gauges { position: absolute; left: 14px; bottom: 14px; width: 230px; }
+  .gauge-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .gauge-label { font-size: 12px; font-weight: bold; color: #ffd94d; width: 52px; }
+  .gauge-track { flex: 1; height: 16px; background: rgba(255,255,255,0.25); border-radius: 999px;
+    border: 2px solid #fff; overflow: hidden; }
+  .gauge-fill { height: 100%; border-radius: 999px; background: #7ed957; transition: width 0.2s; }
+  .gauge-fill.low { background: #ff4b3e; }
+  #hud-throttle-fill { background: #4dd0e1; }
+  .gauge-text { font-size: 12px; font-weight: bold; color: #fff; width: 64px; }
+
+  /* Balloons (lives), bottom right. */
+  #hud-lives { position: absolute; right: 14px; bottom: 14px; text-align: right; }
+  #hud-balloons .balloon { font-size: 34px; color: #ff5d8f; text-shadow: 0 2px 0 rgba(0,0,0,0.4); margin-left: 2px; }
+  #hud-balloons .balloon.lost { color: rgba(255,255,255,0.25); }
+  #hud-lives .label { font-size: 11px; letter-spacing: 2px; color: #ffd94d; font-weight: bold; }
+
+  /* Compass strip, top centre. */
+  #hud-compass { position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    width: 260px; height: 34px; background: rgba(20,28,48,0.82); border: 3px solid #ffd94d;
+    border-radius: 999px; overflow: hidden; }
+  #hud-compass .tick { position: absolute; top: 7px; transform: translateX(-50%);
+    font-size: 14px; font-weight: bold; color: #bfe8ff; }
+  #hud-compass .compass-needle { position: absolute; left: 50%; top: 0; transform: translateX(-50%);
+    color: #ffd94d; font-size: 13px; }
+
+  /* Artificial horizon, bottom centre. */
+  #hud-horizon { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+    width: 110px; height: 110px; border-radius: 50%; border: 3px solid #ffd94d;
+    background: #7ec8f7; overflow: hidden; box-shadow: 0 4px 0 rgba(0,0,0,0.25); }
+  #hud-horizon-ball { position: absolute; inset: -60px; }
+  #hud-horizon-roll { position: absolute; inset: 0; }
+  .horizon-sky { position: absolute; left: 0; right: 0; top: 0; height: 50%; background: #7ec8f7; }
+  .horizon-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 50%; background: #8a5a2b; }
+  .horizon-line { position: absolute; left: 0; right: 0; top: 50%; height: 3px; background: #fff; margin-top: -1px; }
+  .horizon-plane { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    color: #ffd94d; font-size: 22px; font-weight: bold; z-index: 2; text-shadow: 0 1px 0 #000; }
+
+  /* Centre banner + message. */
+  #hud-banner { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%) scale(0.9);
+    font-size: 54px; font-weight: bold; color: #ffd94d; text-shadow: 0 4px 0 #d63a2e, 0 8px 18px rgba(0,0,0,0.5);
+    opacity: 0; transition: opacity 0.2s, transform 0.2s; text-align: center; white-space: nowrap; }
+  #hud-banner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  #hud-message { position: absolute; top: calc(30% + 52px); left: 50%; transform: translateX(-50%);
+    font-size: 19px; font-weight: bold; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,0.6);
+    opacity: 0; transition: opacity 0.2s; text-align: center; white-space: nowrap; }
+  #hud-message.show { opacity: 1; }
+  #hud-stall { position: absolute; top: 44%; left: 50%; transform: translateX(-50%);
+    font-size: 26px; font-weight: bold; color: #ff4b3e; background: rgba(255,255,255,0.9);
+    border-radius: 999px; padding: 4px 18px; opacity: 0; }
+  #hud-stall.show { opacity: 1; }
+  #hud-timer { position: absolute; top: 150px; left: 50%; transform: translateX(-50%);
+    font-size: 16px; font-weight: bold; color: #ffd94d; text-shadow: 0 2px 0 rgba(0,0,0,0.5); }
+  #help-line { position: absolute; bottom: 150px; left: 50%; transform: translateX(-50%);
+    font-size: 13px; font-weight: bold; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,0.6);
+    background: rgba(20,28,48,0.55); border-radius: 999px; padding: 5px 14px; white-space: nowrap; }
+  #mute-state { position: absolute; top: 150px; right: 14px; font-size: 12px; font-weight: bold;
+    color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,0.5); }
+
+  /* Cockpit frame: a simple dashboard strip shown in cockpit view. */
+  #cockpit-frame { position: fixed; left: 0; right: 0; bottom: 0; height: 150px; z-index: 4;
+    display: none; pointer-events: none;
+    background: linear-gradient(to top, #2b2d42 0%, #2b2d42 62%, rgba(43,45,66,0) 100%); }
+  #cockpit-frame .dash-dial { position: absolute; bottom: 18px; width: 74px; height: 74px;
+    border-radius: 50%; background: #fff8e0; border: 5px solid #ffd94d; }
+  #cockpit-frame .dash-dial.left { left: 30%; }
+  #cockpit-frame .dash-dial.right { right: 30%; }
+  #cockpit-frame .dash-dial::after { content: ""; position: absolute; left: 50%; top: 50%;
+    width: 4px; height: 30px; background: #ff4b3e; transform-origin: top center;
+    transform: translateX(-50%) rotate(35deg); }
+  #cockpit-frame .dash-label { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    color: #ffd94d; font-size: 12px; font-weight: bold; letter-spacing: 2px; }
+
+  /* ---------- Title screen ---------- */
+  #title-screen { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px; pointer-events: auto;
+    background: linear-gradient(to bottom, rgba(20,40,80,0.25), rgba(20,40,80,0.55)); }
+  #title-screen h1 { margin: 0; font-size: 84px; font-weight: bold; color: #fff;
+    letter-spacing: 4px; text-shadow: 0 5px 0 #d63a2e, 0 10px 24px rgba(0,0,0,0.5); }
+  #title-screen h1 .wing { color: #ffd94d; }
+  #title-screen .subtitle { font-size: 20px; font-weight: bold; color: #fff;
+    text-shadow: 0 2px 0 rgba(0,0,0,0.6); }
+  .mission-row { display: flex; gap: 16px; margin-top: 8px; }
+  .mission-card { width: 250px; background: rgba(255,255,255,0.94); border: 4px solid #ffd94d;
+    border-radius: 18px; padding: 16px; cursor: pointer; box-shadow: 0 6px 0 rgba(0,0,0,0.3);
+    transition: transform 0.1s; }
+  .mission-card:hover { transform: translateY(-4px); }
+  .mission-card .key { display: inline-block; background: #ff4b3e; color: #fff; font-weight: bold;
+    border-radius: 8px; padding: 2px 10px; font-size: 15px; }
+  .mission-card h2 { margin: 8px 0 6px; font-size: 21px; color: #2b2d42; }
+  .mission-card p { margin: 0; font-size: 14px; color: #444; line-height: 1.4; }
+  #title-screen .controls { font-size: 14px; font-weight: bold; color: #fff;
+    background: rgba(20,28,48,0.7); border-radius: 999px; padding: 8px 18px;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.5); }
+</style>
+</head>
+<body>
+<canvas id="game-canvas" aria-label="Paperwing: fly the paper plane through candy gates, pop balloons and land on the runway"></canvas>
+
+<!-- Cockpit dashboard strip (cockpit camera only) -->
+<div id="cockpit-frame">
+  <div class="dash-dial left"></div>
+  <div class="dash-dial right"></div>
+  <div class="dash-label">P A P E R W I N G</div>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <div id="hud-mission">PAPERWING — GATE SLALOM</div>
+  <div class="panel" id="hud-alt"><div class="label">ALTITUDE</div><div><span class="value" id="hud-alt-value">0000</span> <span class="unit">FT</span></div></div>
+  <div class="panel" id="hud-speed"><div class="label">SPEED</div><div><span class="value" id="hud-speed-value">000</span> <span class="unit">KT</span></div></div>
+  <div class="panel" id="hud-heading"><div class="label">HEADING</div><div><span class="value" id="hud-heading-value">000°</span></div></div>
+  <div class="panel" id="hud-score-box"><div class="label">SCORE</div><div class="value" id="hud-score">00000</div></div>
+  <div id="hud-compass"></div>
+  <div id="hud-objective">Fly through every gate in order</div>
+  <div id="hud-timer"></div>
+  <div id="hud-banner"></div>
+  <div id="hud-message"></div>
+  <div id="hud-stall">⚠ STALL — THROTTLE UP!</div>
+  <div id="hud-gauges">
+    <div class="gauge-row"><span class="gauge-label">FUEL</span><div class="gauge-track"><div class="gauge-fill" id="hud-fuel-fill" style="width:100%"></div></div><span class="gauge-text" id="hud-fuel-text">FUEL 100%</span></div>
+    <div class="gauge-row"><span class="gauge-label">THROTTLE</span><div class="gauge-track"><div class="gauge-fill" id="hud-throttle-fill" style="width:55%"></div></div><span class="gauge-text" id="hud-throttle-text">THR 55%</span></div>
+  </div>
+  <div id="hud-lives"><div class="label">BALLOONS</div><div id="hud-balloons"></div></div>
+  <div id="hud-horizon"><div id="hud-horizon-ball"><div id="hud-horizon-roll"><div class="horizon-sky"></div><div class="horizon-ground"></div><div class="horizon-line"></div></div></div><div class="horizon-plane">✈</div></div>
+  <div id="help-line">↑↓ pitch &nbsp; ←→ roll &nbsp; SHIFT throttle up &nbsp; CTRL throttle down &nbsp; C camera &nbsp; M mute &nbsp; R restart &nbsp; SPACE brake</div>
+  <div id="mute-state">SOUND ON (M)</div>
+</div>
+
+<!-- Title screen -->
+<div id="title-screen">
+  <h1>PAPER<span class="wing">WING</span></h1>
+  <div class="subtitle">A bright little stunt plane over a toy valley — thread the gates, pop the balloons, kiss the runway.</div>
+  <div class="mission-row">
+    <div class="mission-card" data-mission="slalom"><span class="key">1</span><h2>GATE SLALOM</h2><p>Thread all 8 candy gates in order. Each gate adds time and points — faster is more points, but harder to hit.</p></div>
+    <div class="mission-card" data-mission="balloons"><span class="key">2</span><h2>BALLOON POP</h2><p>Pop 10 balloons in order. Fuel refills ONLY when you fly a gate — plan every turn.</p></div>
+    <div class="mission-card" data-mission="landing"><span class="key">3</span><h2>AIRFIELD LANDING</h2><p>Follow the gates home and land gently on the striped runway. Slow and centred wins.</p></div>
+  </div>
+  <div class="controls">ARROWS / WASD fly &nbsp;·&nbsp; SHIFT throttle up &nbsp;·&nbsp; CTRL throttle down &nbsp;·&nbsp; C camera &nbsp;·&nbsp; M mute &nbsp;·&nbsp; R restart &nbsp;·&nbsp; drag mouse to look around</div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
